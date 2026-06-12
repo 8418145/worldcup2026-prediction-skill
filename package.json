@@ -1,0 +1,25 @@
+{
+  "name": "worldcup2026-prediction-skill",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public World Cup prediction demo backed by a server-side model provider.",
+  "type": "module",
+  "scripts": {
+    "start": "node local-demo/server.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/8418145/worldcup2026-prediction-skill.git"
+  },
+  "license": "MIT",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/8418145/worldcup2026-prediction-skill/issues"
+  },
+  "homepage": "https://github.com/8418145/worldcup2026-prediction-skill#readme"
+}

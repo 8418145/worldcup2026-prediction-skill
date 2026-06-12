@@ -26,8 +26,21 @@ async function loadLocalEnv() {
 await loadLocalEnv();
 
 const port = Number(process.env.PORT || 5176);
-const defaultApiBase = (process.env.OPENAI_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, "");
-const defaultModel = process.env.OPENAI_MODEL || "fable5.0";
+const host = process.env.HOST || "0.0.0.0";
+const primaryProvider = {
+  name: "primary",
+  apiBase: (process.env.PRIMARY_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.deepseek.com/v1").replace(/\/$/, ""),
+  apiKey: process.env.PRIMARY_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "",
+  model: process.env.PRIMARY_OPENAI_MODEL || process.env.OPENAI_MODEL || "gpt-5.5",
+};
+const fableProvider = {
+  name: "fable",
+  apiBase: (process.env.FABLE_OPENAI_BASE_URL || "").replace(/\/$/, ""),
+  apiKey: process.env.FABLE_OPENAI_API_KEY || "",
+  model: process.env.FABLE_OPENAI_MODEL || "fable5.0",
+};
+const fableFreeUses = Number(process.env.FABLE_FREE_USES || 2);
+const adminToken = process.env.ADMIN_TOKEN || "";
 
 async function readJson(req) {
   const chunks = [];
@@ -36,34 +49,36 @@ async function readJson(req) {
   return JSON.parse(text || "{}");
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload, null, 2);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    ...extraHeaders,
   });
   res.end(body);
 }
 
-function cleanApiBase(value) {
-  const raw = String(value || defaultApiBase).trim();
-  return raw.replace(/\/$/, "");
-}
-
-function cleanModel(value) {
-  return String(value || defaultModel).trim();
-}
-
-function cleanApiKey(value) {
-  return String(value || process.env.OPENAI_API_KEY || "").trim();
-}
-
 function publicConfig() {
   return {
-    apiBase: defaultApiBase,
-    model: defaultModel,
-    hasApiKey: Boolean(process.env.OPENAI_API_KEY),
+    model: primaryProvider.model,
+    hasApiKey: Boolean(primaryProvider.apiKey),
+    fableFreeUses,
+    fableEnabled: Boolean(fableProvider.apiBase && fableProvider.apiKey),
   };
+}
+
+function requireAdmin(req, res) {
+  if (!adminToken) {
+    sendJson(res, 404, { error: "Admin API is disabled" });
+    return false;
+  }
+  const token = req.headers["x-admin-token"];
+  if (token !== adminToken) {
+    sendJson(res, 401, { error: "Unauthorized" });
+    return false;
+  }
+  return true;
 }
 
 async function callChat({ apiBase, apiKey, model, messages, responseFormat }) {
@@ -73,36 +88,93 @@ async function callChat({ apiBase, apiKey, model, messages, responseFormat }) {
   };
   if (responseFormat) body.response_format = responseFormat;
 
-  const upstream = await fetch(`${apiBase}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  let upstream;
+  let raw = "";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    upstream = await fetch(`${apiBase}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    raw = await upstream.text();
+    if (![502, 503, 504].includes(upstream.status)) break;
+    await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+  }
 
-  const raw = await upstream.text();
   if (!upstream.ok) {
     const error = new Error("Model request failed");
     error.status = upstream.status;
-    error.detail = raw;
+    error.detail = safeProviderError(upstream.status, raw);
     throw error;
   }
   return JSON.parse(raw).choices?.[0]?.message?.content;
 }
 
+function safeProviderError(status, raw) {
+  try {
+    const data = JSON.parse(raw);
+    return data.error?.message || data.message || `Model provider returned HTTP ${status}`;
+  } catch {
+    if (/<title>(.*?)<\/title>/i.test(raw)) {
+      const title = raw.match(/<title>(.*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim();
+      return title || `Model provider returned HTTP ${status}`;
+    }
+    return raw.slice(0, 300) || `Model provider returned HTTP ${status}`;
+  }
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie || "";
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        return index === -1
+          ? [part, ""]
+          : [decodeURIComponent(part.slice(0, index)), decodeURIComponent(part.slice(index + 1))];
+      }),
+  );
+}
+
+function fableUses(req) {
+  const value = Number.parseInt(parseCookies(req).wc_fable_used || "0", 10);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function providerForRequest(req) {
+  const used = fableUses(req);
+  const fableReady = Boolean(fableProvider.apiBase && fableProvider.apiKey && fableFreeUses > 0);
+  if (fableReady && used < fableFreeUses) {
+    return { provider: fableProvider, used, shouldIncrementFable: true };
+  }
+  return { provider: primaryProvider, used, shouldIncrementFable: false };
+}
+
+function fableCookieHeaders(nextUsed) {
+  return {
+    "set-cookie": `wc_fable_used=${encodeURIComponent(String(nextUsed))}; Max-Age=2592000; Path=/; SameSite=Lax`,
+  };
+}
+
+function selectedProviderHeaders(selected) {
+  return selected.shouldIncrementFable ? fableCookieHeaders(selected.used + 1) : {};
+}
+
 async function listModels(req, res) {
-  const payload = await readJson(req);
-  const apiBase = cleanApiBase(payload.apiBase);
-  const apiKey = cleanApiKey(payload.apiKey);
-  if (!apiKey) {
+  if (!requireAdmin(req, res)) return;
+  if (!primaryProvider.apiKey) {
     sendJson(res, 400, { error: "Missing API key" });
     return;
   }
 
-  const upstream = await fetch(`${apiBase}/models`, {
-    headers: { authorization: `Bearer ${apiKey}` },
+  const upstream = await fetch(`${primaryProvider.apiBase}/models`, {
+    headers: { authorization: `Bearer ${primaryProvider.apiKey}` },
   });
   const raw = await upstream.text();
   if (!upstream.ok) {
@@ -121,25 +193,23 @@ async function listModels(req, res) {
 async function predict(req, res) {
   const payload = await readJson(req);
   const { teamA, teamB, stage = "小组赛" } = payload;
-  const apiBase = cleanApiBase(payload.apiBase);
-  const model = cleanModel(payload.model);
-  const apiKey = cleanApiKey(payload.apiKey);
 
   if (!teamA || !teamB) {
     sendJson(res, 422, { error: "teamA and teamB are required" });
     return;
   }
-  if (!apiKey) {
-    sendJson(res, 400, { error: "Missing API key" });
+  if (!primaryProvider.apiKey) {
+    sendJson(res, 500, { error: "Server model provider is not configured" });
     return;
   }
 
   const skill = await readFile(path.join(repoRoot, "skill.md"), "utf8");
+  const selected = providerForRequest(req);
   try {
     const content = await callChat({
-      apiBase,
-      apiKey,
-      model,
+      apiBase: selected.provider.apiBase,
+      apiKey: selected.provider.apiKey,
+      model: selected.provider.model,
       responseFormat: { type: "json_object" },
       messages: [
         { role: "system", content: skill },
@@ -149,8 +219,29 @@ async function predict(req, res) {
         },
       ],
     });
-    sendJson(res, 200, JSON.parse(content));
+    sendJson(res, 200, JSON.parse(content), selectedProviderHeaders(selected));
   } catch (error) {
+    if (selected.provider.name === "fable" && primaryProvider.apiKey) {
+      try {
+        const content = await callChat({
+          apiBase: primaryProvider.apiBase,
+          apiKey: primaryProvider.apiKey,
+          model: primaryProvider.model,
+          responseFormat: { type: "json_object" },
+          messages: [
+            { role: "system", content: skill },
+            {
+              role: "user",
+              content: `请预测这场 2026 世界杯比赛:【${stage}】${teamA} vs ${teamB}。严格按约束文档的 JSON 格式输出。`,
+            },
+          ],
+        });
+        sendJson(res, 200, JSON.parse(content), selectedProviderHeaders(selected));
+        return;
+      } catch (fallbackError) {
+        error = fallbackError;
+      }
+    }
     if (error.detail) {
       sendJson(res, error.status || 502, { error: error.message, detail: error.detail });
     } else {
@@ -209,22 +300,19 @@ ${bullets.join("\n")}
 }
 
 async function previewBrief(req, res) {
-  const payload = await readJson(req);
-  const apiBase = cleanApiBase(payload.apiBase);
-  const model = cleanModel(payload.model);
-  const apiKey = cleanApiKey(payload.apiKey);
+  if (!requireAdmin(req, res)) return;
   const items = await fetchNewsItems();
   let brief = fallbackBrief(items);
 
-  if (apiKey && model) {
+  if (primaryProvider.apiKey && primaryProvider.model) {
     const newsText = items
       .map((item, index) => `${index + 1}. ${item.title} | ${item.source || "unknown"} | ${item.pubDate}`)
       .join("\n");
     try {
       brief = await callChat({
-        apiBase,
-        apiKey,
-        model,
+        apiBase: primaryProvider.apiBase,
+        apiKey: primaryProvider.apiKey,
+        model: primaryProvider.model,
         messages: [
           {
             role: "system",
@@ -246,6 +334,7 @@ async function previewBrief(req, res) {
 }
 
 async function writeBrief(req, res) {
+  if (!requireAdmin(req, res)) return;
   const { brief } = await readJson(req);
   if (!String(brief || "").startsWith("## 六、最新情报")) {
     sendJson(res, 422, { error: "brief must start with ## 六、最新情报" });
@@ -315,7 +404,10 @@ createServer(async (req, res) => {
   } catch (error) {
     sendJson(res, 500, { error: error.message });
   }
-}).listen(port, () => {
-  console.log(`WorldCup local demo: http://localhost:${port}`);
-  console.log(`Model endpoint: ${defaultApiBase} / ${defaultModel}`);
+}).listen(port, host, () => {
+  console.log(`WorldCup local demo: http://${host}:${port}`);
+  console.log(`Primary model endpoint: ${primaryProvider.apiBase} / ${primaryProvider.model}`);
+  if (fableProvider.apiBase && fableProvider.apiKey) {
+    console.log(`Fable model endpoint: ${fableProvider.apiBase} / ${fableProvider.model} (${fableFreeUses} free uses per browser)`);
+  }
 });

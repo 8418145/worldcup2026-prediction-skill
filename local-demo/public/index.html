@@ -3,110 +3,146 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WorldCup 2026 Prediction Skill</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <title>赛场罗盘 26 · 世界杯预测模板</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <section class="panel control">
+    <div class="notice">AI 赛前推演模板，仅供球迷讨论与内容创作，不提供投注、赔率或下注建议。</div>
+
+    <main class="page">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">FIFA WORLD CUP 2026 · MATCH INTELLIGENCE</p>
+          <h1>赛场罗盘 26</h1>
+          <p class="lead">把赛程、球队资料、每日情报和模型预测集中在一个面向球迷的赛前推演页面里。</p>
+          <div class="hero-meta">
+            <span>48 队</span>
+            <span>12 组</span>
+            <span>64 场</span>
+            <span>6.11 - 7.19</span>
+          </div>
+        </div>
+
+        <aside class="quick-card">
+          <span class="card-label">下一步</span>
+          <strong>选择一场比赛</strong>
+          <p>点击焦点赛程自动填入预测台，也可以手动选择任意两队。</p>
+        </aside>
+      </section>
+
+      <div class="toolbar">
         <div>
-          <p class="eyebrow">WorldCup 2026 Prediction Skill</p>
-          <h1>本地预测控制台</h1>
+          <span id="activeModelLabel">预测服务准备中</span>
+          <small id="activeBaseLabel">模型由服务器统一配置</small>
         </div>
+      </div>
 
-        <form id="predictForm" class="form">
-          <fieldset class="config-box">
-            <legend>模型配置</legend>
+      <section class="layout">
+
+        <section class="panel focus">
+          <div class="section-title">
+            <span>01</span>
+            <h2>焦点赛程</h2>
+          </div>
+          <div id="matchRail" class="match-rail"></div>
+        </section>
+
+        <section class="panel predictor">
+          <div class="section-title">
+            <span>02</span>
+            <h2>对阵预测台</h2>
+          </div>
+          <form id="predictForm" class="predict-form">
             <label>
-              接口地址
-              <input id="apiBase" type="url" autocomplete="off" />
+              阶段
+              <select id="stage">
+                <option>小组赛</option>
+                <option>32 强</option>
+                <option>16 强</option>
+                <option>8 强</option>
+                <option>半决赛</option>
+                <option>决赛</option>
+              </select>
             </label>
-            <label>
-              API Key
-              <input id="apiKey" type="password" autocomplete="off" placeholder="仅在本机请求中使用" />
-            </label>
-            <label>
-              模型名
-              <input id="model" type="text" autocomplete="off" list="modelPresets" />
-              <datalist id="modelPresets">
-                <option value="fable5.0"></option>
-                <option value="gpt-5.5"></option>
-                <option value="gpt-5.4"></option>
-                <option value="gpt-5.4-mini"></option>
-              </datalist>
-            </label>
-            <button id="loadModels" type="button" class="secondary">获取模型列表</button>
-            <select id="modelList" aria-label="模型列表">
-              <option value="">模型列表会显示在这里</option>
-            </select>
-          </fieldset>
+            <div class="versus-grid">
+              <label>
+                主队
+                <select id="teamA"></select>
+              </label>
+              <div class="versus">VS</div>
+              <label>
+                客队
+                <select id="teamB"></select>
+              </label>
+            </div>
+            <button type="submit">开始预测</button>
+            <div id="predictProgress" class="progress" hidden>
+              <span></span>
+            </div>
+          </form>
+        </section>
 
-          <label>
-            阶段
-            <select id="stage">
-              <option>小组赛</option>
-              <option>32 强</option>
-              <option>16 强</option>
-              <option>8 强</option>
-              <option>半决赛</option>
-              <option>决赛</option>
-            </select>
-          </label>
-          <label>
-            球队 A
-            <select id="teamA"></select>
-          </label>
-          <label>
-            球队 B
-            <select id="teamB"></select>
-          </label>
-          <button type="submit">生成预测</button>
-        </form>
+        <section class="panel result">
+          <div class="section-title">
+            <span>03</span>
+            <h2>预测结果</h2>
+          </div>
+          <div class="prob-grid">
+            <div>
+              <span id="teamAName">墨西哥</span>
+              <strong id="teamAProb">--</strong>
+            </div>
+            <div>
+              <span>平局</span>
+              <strong id="drawProb">--</strong>
+            </div>
+            <div>
+              <span id="teamBName">南非</span>
+              <strong id="teamBProb">--</strong>
+            </div>
+          </div>
+          <div class="result-meta">
+            <span>预测比分</span>
+            <b id="predictedScore">--</b>
+            <span>置信度</span>
+            <b id="confidence">--</b>
+          </div>
+          <ul id="factors" class="factors"></ul>
+          <p id="analysis" class="analysis">等待第一次预测。</p>
+          <div id="players" class="players"></div>
+          <details>
+            <summary>查看原始 JSON</summary>
+            <pre id="rawJson">{}</pre>
+          </details>
+        </section>
 
-        <p id="status" class="status">服务已启动。API Key 只从本地配置读取。</p>
-      </section>
+        <section class="panel schedule">
+          <div class="section-title">
+            <span>04</span>
+            <h2>赛程模板</h2>
+          </div>
+          <div id="scheduleGrid" class="schedule-grid"></div>
+        </section>
 
-      <section class="panel result">
-        <div class="scoreline">
-          <div>
-            <span id="teamAName">墨西哥</span>
-            <strong id="teamAProb">--</strong>
+        <section class="panel accuracy-board">
+          <div class="section-title">
+            <span>05</span>
+            <h2>命中记录</h2>
           </div>
-          <div>
-            <span>平局</span>
-            <strong id="drawProb">--</strong>
-          </div>
-          <div>
-            <span id="teamBName">南非</span>
-            <strong id="teamBProb">--</strong>
-          </div>
-        </div>
-        <div class="match-meta">
-          <span>预测比分</span>
-          <b id="predictedScore">--</b>
-          <span>置信度</span>
-          <b id="confidence">--</b>
-        </div>
-        <ul id="factors" class="factors"></ul>
-        <p id="analysis" class="analysis">等待第一次预测。</p>
-        <pre id="rawJson">{}</pre>
-      </section>
+          <div id="recordStats" class="record-stats"></div>
+          <div id="recordList" class="record-list"></div>
+        </section>
 
-      <section class="panel brief">
-        <div class="section-head">
-          <div>
-            <p class="eyebrow">Daily Brief</p>
-            <h2>每日情报更新</h2>
+        <section class="panel disclaimer">
+          <div class="section-title">
+            <span>06</span>
+            <h2>使用边界</h2>
           </div>
-          <div class="actions">
-            <button id="previewBrief" type="button" class="secondary">获取并整理</button>
-            <button id="writeBrief" type="button">写入第六节</button>
-          </div>
-        </div>
-        <textarea id="briefText" spellcheck="false" placeholder="先点击“获取并整理”，确认内容后再写入 skill.md 第六节。"></textarea>
-        <div id="newsList" class="news-list"></div>
+          <p>本模板面向赛前讨论、球迷社区和内容创作。预测结果来自模型推演和公开资料整理，不代表真实赛果保证，不应用于任何投注、赔率、付费推荐或违法场景。</p>
+        </section>
       </section>
     </main>
-    <script src="/app.js"></script>
+
+    <script src="app.js"></script>
   </body>
 </html>
