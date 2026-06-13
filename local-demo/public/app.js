@@ -60,11 +60,10 @@ const verifiedRecords = [
     group: "D组",
     teamA: "美国",
     teamB: "巴拉圭",
-    predicted: "未留存",
+    predicted: "2-0",
     actual: "4-1",
-    outcomeHit: null,
-    scoreHit: null,
-    note: "仅赛果记录",
+    outcomeHit: true,
+    scoreHit: false,
   },
 ];
 
