@@ -594,6 +594,11 @@ pre {
   border-color: rgba(73, 255, 144, 0.46);
 }
 
+.record-row.is-untracked {
+  border-color: rgba(255, 201, 71, 0.24);
+  background: rgba(34, 26, 8, 0.72);
+}
+
 .record-row em {
   color: #ffc947;
   font-style: normal;
@@ -614,6 +619,12 @@ pre {
   color: #4dff8e;
   font-size: 12px;
   font-weight: 900;
+}
+
+.record-row.is-untracked mark {
+  border-color: rgba(255, 201, 71, 0.34);
+  background: rgba(255, 201, 71, 0.12);
+  color: #ffd36a;
 }
 
 .disclaimer {

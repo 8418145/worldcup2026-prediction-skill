@@ -16,8 +16,8 @@ const teams = [
 const schedule = [
   { group: "A组", date: "6/12 03:00", label: "已赛 · 北京时间", teamA: "墨西哥", teamB: "南非", status: "FT", score: "2-0" },
   { group: "A组", date: "6/12 10:00", label: "已赛 · 北京时间", teamA: "韩国", teamB: "捷克", status: "FT", score: "2-1" },
-  { group: "B组", date: "6/13 03:00", label: "小组赛 · 北京时间", teamA: "加拿大", teamB: "波黑" },
-  { group: "D组", date: "6/13 09:00", label: "小组赛 · 北京时间", teamA: "美国", teamB: "巴拉圭" },
+  { group: "B组", date: "6/13 03:00", label: "已赛 · 北京时间", teamA: "加拿大", teamB: "波黑", status: "FT", score: "1-1" },
+  { group: "D组", date: "6/13 09:00", label: "已赛 · 北京时间", teamA: "美国", teamB: "巴拉圭", status: "FT", score: "4-1" },
   { group: "B组", date: "6/14 03:00", label: "小组赛 · 北京时间", teamA: "卡塔尔", teamB: "瑞士" },
   { group: "C组", date: "6/14 06:00", label: "小组赛 · 北京时间", teamA: "巴西", teamB: "摩洛哥" },
   { group: "C组", date: "6/14 09:00", label: "小组赛 · 北京时间", teamA: "海地", teamB: "苏格兰" },
@@ -46,6 +46,25 @@ const verifiedRecords = [
     actual: "2-1",
     outcomeHit: true,
     scoreHit: true,
+  },
+  {
+    group: "B组",
+    teamA: "加拿大",
+    teamB: "波黑",
+    predicted: "2-1",
+    actual: "1-1",
+    outcomeHit: false,
+    scoreHit: false,
+  },
+  {
+    group: "D组",
+    teamA: "美国",
+    teamB: "巴拉圭",
+    predicted: "未留存",
+    actual: "4-1",
+    outcomeHit: null,
+    scoreHit: null,
+    note: "仅赛果记录",
   },
 ];
 
@@ -141,14 +160,15 @@ function percent(count, total) {
 }
 
 function renderRecords() {
-  const total = verifiedRecords.length;
-  const outcomeHits = verifiedRecords.filter((item) => item.outcomeHit).length;
-  const scoreHits = verifiedRecords.filter((item) => item.scoreHit).length;
+  const scoredRecords = verifiedRecords.filter((item) => item.outcomeHit !== null && item.scoreHit !== null);
+  const total = scoredRecords.length;
+  const outcomeHits = scoredRecords.filter((item) => item.outcomeHit).length;
+  const scoreHits = scoredRecords.filter((item) => item.scoreHit).length;
 
   recordStats.innerHTML = `
     <div>
-      <strong>${total}</strong>
-      <span>已验证场次</span>
+      <strong>${verifiedRecords.length}</strong>
+      <span>已完赛记录</span>
     </div>
     <div>
       <strong>${percent(outcomeHits, total)}</strong>
@@ -163,14 +183,15 @@ function renderRecords() {
   recordList.innerHTML = "";
   for (const item of verifiedRecords) {
     const row = document.createElement("div");
-    row.className = "record-row";
+    const isUntracked = item.outcomeHit === null || item.scoreHit === null;
+    row.className = `record-row${isUntracked ? " is-untracked" : ""}`;
     row.innerHTML = `
       <strong>${flag(item.teamA)} ${item.teamA} <em>vs</em> ${flag(item.teamB)} ${item.teamB}</strong>
       <span>${item.group}</span>
       <b>预测 ${item.predicted}</b>
       <b>实际 ${item.actual}</b>
-      <mark>${item.outcomeHit ? "赛果命中" : "赛果未中"}</mark>
-      <mark>${item.scoreHit ? "比分命中" : "比分未中"}</mark>
+      <mark>${isUntracked ? "未纳入统计" : item.outcomeHit ? "赛果命中" : "赛果未中"}</mark>
+      <mark>${isUntracked ? (item.note || "仅赛果记录") : item.scoreHit ? "比分命中" : "比分未中"}</mark>
     `;
     recordList.append(row);
   }
